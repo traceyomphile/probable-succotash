@@ -42,7 +42,7 @@ class RawChessBoard:
 			return False
 
 		if dest_row == king_x and dest_col == king_y: #if the piece can move to the king's position then thats a capture
-			return True
+			return False if old_position is None else self.is_capture(src_row, src_col, dest_row, dest_col)	
 
 		return False
 
