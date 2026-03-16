@@ -9,13 +9,13 @@ MAX_NUM_PLY = 100
 
 class RawChessBoard:
 	def __init__(self, board=None, number_of_total_moves=None, game_status=None):
-		if board is None and number_of_total_moves is None and game_status is None:
+		if board is None and number_of_total_moves is None and game_status is None:			# Tracey: Double check on board -> replaced with number_of_total_moves 
 			self.board = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
 			self.number_of_total_moves = 0
 			self.game_status = None # win(-1)/draw(0)
 		else:
 			self.board = board
-			self.number_of_total_moves = number_of_total_moves
+			self.number_of_total_moves = number_of_total_moves		# No point for parameter number_of_total_moves if never assigned.
 			self.game_status = game_status
 
 	def is_position_empty(self, new_row, new_col):
@@ -42,15 +42,15 @@ class RawChessBoard:
 			return False
 
 		if dest_row == king_x and dest_col == king_y: #if the piece can move to the king's position then thats a capture
-			return False if old_position is None else self.is_capture(src_row, src_col, dest_row, dest_col)	
+			return True # My thought: False if old_position is None else self.is_capture(src_row, src_col, dest_row, dest_col)
 
 		return False
 
 	def is_forward_move(self, src_row, src_col, dest_row, dest_col, color_of_opponent):
 		if color_of_opponent == 'black':
-			return src_row < dest_row
+			return src_row > dest_row	# Fix: Current player is white starting from row_idx = (6, 7)
 		elif color_of_opponent == 'white':
-			return src_row < dest_row
+			return src_row < dest_row	# Current player is black starting from row_idx = (0, 1)
 		return False
 
 	def find_king(self, color):
@@ -247,7 +247,7 @@ class RawChessBoard:
 		piece = self.board[row][col]
 		
 		direction = -1 if piece.islower() else 1
-		start_row = 1 if piece.islower() else 6
+		start_row = 6 if piece.islower() else 1
 		
 		#Forward move
 		nr, nc = row + direction, col
@@ -272,7 +272,7 @@ class RawChessBoard:
 		return moves
 
 	def is_pos_same_color(self, value1, value2):
-		return (value1.islower() and value2.islower()) or (value1.islower() and value2.islower())
+		return (value1.islower() and value2.islower()) or (value1.isupper() and value2.isupper())
 
 	def get_playable_moves(self, color):
 		played_moves = []
