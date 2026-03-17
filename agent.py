@@ -15,21 +15,19 @@ class MonteCarloChessAgent(object):
 			ply_mvs = _get_playable_moves(board.uboard, self.color, is_init=True, in_check=False)
 		else:
 			ply_mvs = _get_playable_moves(board.uboard, self.color, is_init=False, in_check=board.uboard.is_check(self.color))
-		tree = NODE(board, ply_mvs, self.color)
+		tree = NODE(board.uboard, ply_mvs, self.color)
 
 		# Textbook MCTS algorithm
 		for _ in range(MAX_NUM_PLY):
 			leaf = tree.SELECTION()
 			leaf.EXPAND()
 			for child in leaf.CHILDREN:
-				child.SIMULATE(self.opponent)
-				child.BACK_PROPAGATE()
+				sim_res = child.SIMULATE(self.opponent)
+				child.BACK_PROPAGATE(sim_res[0], sim_res[1])
 
 		next_move = tree.get_max_sim_node()
 		return next_move['src_row'], next_move['src_col'], next_move['dest_row'], next_move['dest_col']
-
 			
-
 class RandomChessAgent(object):
 	def __init__(self, color):
 		self.color = color
@@ -37,6 +35,9 @@ class RandomChessAgent(object):
 	def get_next_move(self, board: ChessBoardGUI, is_init=False): #must return src_row, src_col, dest_row, dest_col
 		moves = _get_playable_moves(board.uboard, self.color, is_init, board.uboard.is_check(self.color))
 		
+		# Terminal state
+		if not moves:
+			return None, None, None, None
 		rnd_move = choice(moves)
 		return rnd_move['src_row'], rnd_move['src_col'], rnd_move['dest_row'], rnd_move['dest_col']
 		
@@ -82,13 +83,16 @@ def _get_valid_moves(board: RawChessBoard, playable_move):
 
 def _UCB1(node: NODE):
 	mean = node.WINS / node.SIMULATIONS
-	explore_val = math.sqrt((2 * math.log(node.PARENT.SIMULATIONS)) / node.SIMULATIONS)
+	explore_val = 1.14 * math.sqrt((math.log(node.PARENT.SIMULATIONS)) / node.SIMULATIONS)
 
 	return mean + explore_val
 
 def _captures_first(board: RawChessBoard, playable_moves):
 	capturing_moves = []
 	for move in playable_moves:
+		if board.board[move['src_row']][move['src_col']] is None:
+			continue
+
 		if board.is_capture(move['src_row'], move['src_col'], move['dest_row'], move['dest_col']):
 			capturing_moves.append(move)
 	
@@ -97,7 +101,10 @@ def _captures_first(board: RawChessBoard, playable_moves):
 def _check_giving_moves(board: RawChessBoard, playable_moves):
 	check_giving_moves = []
 	for move in playable_moves:
-		if board.gives_check(move['src_row'], move['src_col'], move['dest_row'], move['dest_col']):
+		if board.board[move['src_row']][move['src_col']] is None:
+			continue
+
+		if board.gives_check(move['src_row'], move['src_col'], move['dest_row'], move['dest_col'], 'white'):	# Opponent is always 'white
 			check_giving_moves.append(move)
 	
 	return check_giving_moves
@@ -117,7 +124,7 @@ def _get_next_move(board: RawChessBoard, playable_moves):
 	return _random_moves(playable_moves)
 
 class NODE(object):
-	def __init__(self, STATE: ChessBoardGUI, ACTIONS, COLOR):
+	def __init__(self, STATE: RawChessBoard, ACTIONS, COLOR):
 		self.STATE = STATE
 		self.ACTIONS = ACTIONS
 		self.WINS = 0		# Initially zero
@@ -127,82 +134,97 @@ class NODE(object):
 		self.COLOR = COLOR
 
 	def EXPAND(self):
-		# Here calling node is a leaf
-		states_after_moves = [copy.deepcopy(self.STATE.uboard.get_state_after_move(self.COLOR, a['src_row'], a['src_col'], a['dest_row'], a['dest_col'])) for a in self.ACTIONS]
+		if self.CHILDREN:
+			return
 		
-		for state in states_after_moves:
-			rboard = RawChessBoard(state, self.STATE.uboard.number_of_total_moves+1, self.STATE.uboard.game_status)
-			new_state = ChessBoardGUI(self.STATE.master, rboard)
+		# Give unvisited children infinite priority
+		for a in self.ACTIONS:
+			safe_board = RawChessBoard(
+				copy.deepcopy(self.STATE.board),
+				self.STATE.number_of_total_moves,
+				self.STATE.game_status
+			)
+
+			new_sate = RawChessBoard(
+				safe_board.get_state_after_move(self.COLOR, a['src_row'], a['src_col'], a['dest_row'], a['dest_col']),
+				self.STATE.number_of_total_moves+1,
+				self.STATE.game_status
+			)
+
 			child_node = NODE(
-				new_state, 
+				new_sate,
 				_get_playable_moves(
-					new_state.uboard, 
-					'black' if self.COLOR == 'white' else 'white', 
-					is_init=new_state.uboard.number_of_total_moves == 1, 
-					in_check=new_state.uboard.is_check(self.COLOR)
-					),
+					new_sate,
+					'black' if self.COLOR == 'white' else 'white',
+					is_init=False,
+					in_check=new_sate.is_check(self.COLOR)
+				),
 				'black' if self.COLOR == 'white' else 'white'
 			)
-			child_node.PARENT= self
+			child_node.PARENT = self
 			self.CHILDREN.append(child_node)
 
 	def SELECTION(self):
-		# Base case 1: calling node is a tree/root node
-		if self.PARENT is None:		# No selection for root node
-			return NODE(self.STATE, self.ACTIONS, self.COLOR)
+		# Base case : Unexpanded leaf
+		if not self.CHILDREN:
+			return self
 		
-		# Base case 2:
-		if self.PARENT.SIMULATIONS == 0 or self.SIMULATIONS == 0:
-			return NODE(self.STATE, self.ACTIONS, self.COLOR)
-		
-		# Use UCB1 to select for none root node.
-		child_UCB1s = [_UCB1(child) for child in self.CHILDREN]
+		# Give unvisited children infinite priority
+		child_UCB1s = [_UCB1(child) if child.SIMULATIONS > 0 else float('inf') for child in self.CHILDREN]
 
 		max_ucb = max(child_UCB1s)
 		max_idx = child_UCB1s.index(max_ucb)
 		return self.CHILDREN[max_idx].SELECTION()
 	
 	def SIMULATE(self, opponent: RandomChessAgent):
-		board = copy.deepcopy(self.STATE.uboard.board)
-		current_state = ChessBoardGUI(
-			self.STATE.master,
-			RawChessBoard(board, 
-				self.STATE.uboard.number_of_total_moves, 
-				self.STATE.uboard.game_status
-			)
+		current_state = RawChessBoard(
+			copy.deepcopy(self.STATE.board),
+			self.STATE.number_of_total_moves, 
+				self.STATE.game_status
 		)
 
 		# Initially color is white
 		color = 'white'
 
-		while not current_state.uboard.is_terminal(color):
-			move = None
+		while not current_state.is_terminal(color):
 			if color == 'white':
-				move = opponent.get_next_move(current_state, current_state.uboard.number_of_total_moves == 0)
+				# Wrap is a minimal object so RandomChessAgent's interface still works
+				class _Wrap: uboard = current_state
+				move = opponent.get_next_move(_Wrap, is_init=False)		# Mid game
+				if move[0] is None:		# Guard against empty current positions
+					break
+
 				current_state.move_piece(color, move[0], move[1], move[2], move[3])
 			else:
-				move = _get_next_move(current_state.uboard, self.ACTIONS)
+				playable_moves = _get_playable_moves(current_state, color, is_init=False, in_check=current_state.is_check(color))
+				if not playable_moves:
+					break
+				
+				move = _get_next_move(current_state, playable_moves)
 				current_state.move_piece(color, move['src_row'], move['src_col'], move['dest_row'], move['dest_col'])
 			color = 'black' if color == 'white' else 'white'
 
-		loss_color = current_state.uboard.find_king_in_checkmate()
+		loss_color = current_state.find_king_in_checkmate()
 		if loss_color is None or (self.COLOR == loss_color):
-			self.WINS += 0
+			self.WINS = 0
 		else:
-			self.WINS += 1
-		self.SIMULATIONS += 1
+			self.WINS = 1
+		self.SIMULATIONS = 1
+		return self.WINS, self.SIMULATIONS
 		
-	def BACK_PROPAGATE(self):
-		# Base case 1: Root node
+	def BACK_PROPAGATE(self, delta_wins, delta_sims):
+		# On first call, delta is the result of the just completed simulation
+		if delta_wins is None:
+			delta_wins = self.WINS
+
+		# Base case: reached root
 		if self.PARENT is None:
 			return
 		
-		for child in self.CHILDREN:
-			self.PARENT.WINS += child.WINS
-			self.PARENT.SIMULATIONS += child.SIMULATIONS
-		return self.PARENT.BACK_PROPAGATE()
+		self.PARENT.WINS += delta_wins
+		self.PARENT.SIMULATIONS += delta_sims
+		self.PARENT.BACK_PROPAGATE(delta_wins, delta_sims)
 	
 	def get_max_sim_node(self):
-		max_sim = max([child.SIMULATIONS for child in self.CHILDREN])
-		max_sim_idx = self.CHILDREN.index(max_sim)
+		max_sim_idx = max(range(len(self.CHILDREN)), key=lambda i: self.CHILDREN[i].SIMULATIONS)
 		return self.ACTIONS[max_sim_idx]
