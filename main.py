@@ -5,9 +5,9 @@ from agent import MonteCarloChessAgent, RandomChessAgent
 from board import MAX_NUM_PLY
 import sys
 
-def play_game(first_color_to_move, board, agent1, agent2, game_root):
+def play_game(first_color_to_move, board: ChessBoardGUI, agent1: RandomChessAgent, agent2: MonteCarloChessAgent, game_root: tk.Tk):
 	num_of_plys_so_far = 0
-	agents = [agent1, agent2]
+	agents: list[RandomChessAgent | MonteCarloChessAgent] = [agent1, agent2]
 
 	current_color_to_play  = None
 	current_idx_agent_to_play = None

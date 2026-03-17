@@ -317,8 +317,8 @@ class RawChessBoard:
 		self.increase_number_of_moves()
 
 class ChessBoardGUI:
-	def __init__(self, master, underlying_board):
-		self.master = master
+	def __init__(self, master, underlying_board: RawChessBoard):
+		self.master = master	# A tinkter object
 		self.canvas = tk.Canvas(master, width=SQUARE_SIZE * BOARD_SIZE, height=SQUARE_SIZE * BOARD_SIZE)
 		self.uboard = underlying_board
 		self.canvas.pack()
