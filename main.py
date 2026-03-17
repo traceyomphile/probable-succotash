@@ -65,7 +65,7 @@ def main():
 	agent2 = MonteCarloChessAgent('black', opponent = agent1)
 
 	#UNCOMMENT THIS LINE to start game
-	#root.after(3000, play_game, curr_color_to_move, board, agent1, agent2, root) #will start playing after 3 seconds
+	root.after(3000, play_game, curr_color_to_move, board, agent1, agent2, root) #will start playing after 3 seconds
 	
 	root.mainloop()
 

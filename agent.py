@@ -48,7 +48,7 @@ def _get_init_moves(board: RawChessBoard, playable_moves):
 		if move['row'] in (1, 6):
 			valid_moves.extend(_get_valid_moves(board, move))
 		elif move['row'] in (0, 7) and move['col'] in (1, 6):
-			valid_moves.extend(_get_valid_moves(move))
+			valid_moves.extend(_get_valid_moves(board, move))
 	return valid_moves
 
 def _get_king_playable_moves(board: RawChessBoard, playable_moves):
