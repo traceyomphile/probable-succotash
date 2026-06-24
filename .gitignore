@@ -1,5 +1,4 @@
 # Ignore all image and docx/pdf files
-*.png
 *.pdf
 *.docx
 /__pycache__
